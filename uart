@@ -1,0 +1,133 @@
+tx
+#include <DHT.h>
+
+#define DHTPIN 2
+#define DHTTYPE DHT11
+
+#define MQ2_PIN A0
+#define FLAME_PIN A1
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(9600);
+  dht.begin();
+}
+
+void loop() {
+
+  int gasValue = analogRead(MQ2_PIN);
+  int flameValue = analogRead(FLAME_PIN);
+
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  if (isnan(temperature) || isnan(humidity)) {
+    return;
+  }
+
+  // Format:
+  // suhu,hum,gas,flame
+
+  Serial.print(temperature);
+  Serial.print(",");
+
+  Serial.print(humidity);
+  Serial.print(",");
+
+  Serial.print(gasValue);
+  Serial.print(",");
+
+  Serial.println(flameValue);
+
+  delay(1000);
+}
+
+rx
+#define LED_MERAH 8
+#define LED_BIRU 6
+#define BUZZER_PIN 9
+
+float suhu;
+float hum;
+int gas;
+int flame;
+
+String dataMasuk;
+
+const int gasThreshold = 400;
+const float tempThreshold = 35.0;
+const int flameThreshold = 500;
+
+void setup() {
+
+  Serial.begin(9600);
+
+  pinMode(LED_MERAH, OUTPUT);
+  pinMode(LED_BIRU, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  Serial.println("Receiver Ready");
+}
+
+void loop() {
+
+  if (Serial.available()) {
+
+    dataMasuk = Serial.readStringUntil('\n');
+
+    int p1 = dataMasuk.indexOf(',');
+    int p2 = dataMasuk.indexOf(',', p1 + 1);
+    int p3 = dataMasuk.indexOf(',', p2 + 1);
+
+    suhu = dataMasuk.substring(0, p1).toFloat();
+
+    hum = dataMasuk.substring(p1 + 1, p2).toFloat();
+
+    gas = dataMasuk.substring(p2 + 1, p3).toInt();
+
+    flame = dataMasuk.substring(p3 + 1).toInt();
+
+    Serial.print("Suhu: ");
+    Serial.print(suhu);
+
+    Serial.print(" | Hum: ");
+    Serial.print(hum);
+
+    Serial.print(" | Gas: ");
+    Serial.print(gas);
+
+    Serial.print(" | Flame: ");
+    Serial.println(flame);
+
+    bool bahaya = false;
+
+    if (gas > gasThreshold)
+      bahaya = true;
+
+    if (suhu > tempThreshold)
+      bahaya = true;
+
+    if (flame < flameThreshold)
+      bahaya = true;
+
+    if (bahaya) {
+
+      digitalWrite(LED_MERAH, HIGH);
+      digitalWrite(LED_BIRU, LOW);
+
+      tone(BUZZER_PIN, 2000);
+
+      Serial.println("PERINGATAN!");
+    }
+    else {
+
+      digitalWrite(LED_MERAH, LOW);
+      digitalWrite(LED_BIRU, HIGH);
+
+      noTone(BUZZER_PIN);
+
+      Serial.println("AMAN");
+    }
+  }
+}
