@@ -1,0 +1,162 @@
+master
+#include <SPI.h>
+#include <DHT.h>
+
+#define DHTPIN 2
+#define DHTTYPE DHT11
+
+#define MQ2_PIN A0
+#define FLAME_PIN A1
+
+#define SS_PIN 10
+
+DHT dht(DHTPIN, DHTTYPE);
+
+struct DataSensor {
+  byte suhu;
+  byte hum;
+  int gas;
+  int flame;
+};
+
+void setup() {
+
+  pinMode(SS_PIN, OUTPUT);
+  digitalWrite(SS_PIN, HIGH);
+
+  SPI.begin();
+
+  dht.begin();
+}
+
+void kirimByte(byte data) {
+  SPI.transfer(data);
+}
+
+void loop() {
+
+  DataSensor data;
+
+  data.suhu = (byte)dht.readTemperature();
+  data.hum = (byte)dht.readHumidity();
+  data.gas = analogRead(MQ2_PIN);
+  data.flame = analogRead(FLAME_PIN);
+
+  digitalWrite(SS_PIN, LOW);
+
+  kirimByte(data.suhu);
+  kirimByte(data.hum);
+
+  kirimByte(highByte(data.gas));
+  kirimByte(lowByte(data.gas));
+
+  kirimByte(highByte(data.flame));
+  kirimByte(lowByte(data.flame));
+
+  digitalWrite(SS_PIN, HIGH);
+
+  delay(1000);
+}
+
+slave
+#include <SPI.h>
+
+#define LED_MERAH 8
+#define LED_BIRU 6
+#define BUZZER_PIN 9
+
+volatile byte indexData = 0;
+volatile byte buffer[6];
+
+byte suhu = 0;
+byte hum = 0;
+int gas = 0;
+int flame = 0;
+
+const int gasThreshold = 400;
+const int flameThreshold = 500;
+const int tempThreshold = 35;
+
+ISR(SPI_STC_vect)
+{
+  byte c = SPDR;
+
+  if (indexData < 6) {
+    buffer[indexData++] = c;
+  }
+
+  if (indexData >= 6) {
+
+    suhu = buffer[0];
+    hum = buffer[1];
+
+    gas = word(buffer[2], buffer[3]);
+    flame = word(buffer[4], buffer[5]);
+
+    indexData = 0;
+  }
+}
+
+void setup() {
+
+  pinMode(MISO, OUTPUT);
+
+  pinMode(LED_MERAH, OUTPUT);
+  pinMode(LED_BIRU, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  SPCR |= _BV(SPE);
+  SPI.attachInterrupt();
+
+  Serial.begin(9600);
+}
+
+void loop() {
+
+  bool bahaya = false;
+
+  if (suhu > tempThreshold)
+    bahaya = true;
+
+  if (gas > gasThreshold)
+    bahaya = true;
+
+  if (flame < flameThreshold)
+    bahaya = true;
+
+  if (bahaya) {
+
+    digitalWrite(LED_MERAH, HIGH);
+    digitalWrite(LED_BIRU, LOW);
+
+    tone(BUZZER_PIN, 2000);
+  }
+  else {
+
+    digitalWrite(LED_MERAH, LOW);
+    digitalWrite(LED_BIRU, HIGH);
+
+    noTone(BUZZER_PIN);
+  }
+
+  Serial.print("Suhu: ");
+  Serial.print(suhu);
+
+  Serial.print(" | Hum: ");
+  Serial.print(hum);
+
+  Serial.print(" | Gas: ");
+  Serial.print(gas);
+
+  Serial.print(" | Flame: ");
+  Serial.println(flame);
+
+  delay(500);
+}
+
+hubungkan
+MASTER D11 (MOSI) ---- SLAVE D11 (MOSI)
+MASTER D12 (MISO) ---- SLAVE D12 (MISO)
+MASTER D13 (SCK)  ---- SLAVE D13 (SCK)
+MASTER D10 (SS)   ---- SLAVE D10 (SS)
+GND               ---- GND
