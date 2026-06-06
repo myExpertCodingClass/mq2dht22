@@ -1,0 +1,144 @@
+master
+#include <Wire.h>
+#include <DHT.h>
+
+#define DHTPIN 2
+#define DHTTYPE DHT11
+
+#define MQ2_PIN A0
+#define FLAME_PIN A1
+
+DHT dht(DHTPIN, DHTTYPE);
+
+struct DataSensor {
+  int suhu;
+  int hum;
+  int gas;
+  int flame;
+};
+
+DataSensor data;
+
+void setup() {
+
+  Wire.begin(); // Master
+
+  dht.begin();
+
+  Serial.begin(9600);
+}
+
+void loop() {
+
+  float suhu = dht.readTemperature();
+  float hum  = dht.readHumidity();
+
+  if (!isnan(suhu) && !isnan(hum)) {
+
+    data.suhu = suhu;
+    data.hum = hum;
+    data.gas = analogRead(MQ2_PIN);
+    data.flame = analogRead(FLAME_PIN);
+
+    Wire.beginTransmission(8); // alamat slave
+
+    Wire.write((byte*)&data, sizeof(data));
+
+    Wire.endTransmission();
+
+    Serial.print("Kirim -> ");
+    Serial.print(data.suhu);
+    Serial.print(" ");
+    Serial.print(data.gas);
+    Serial.print(" ");
+    Serial.println(data.flame);
+  }
+
+  delay(1000);
+}
+
+slave
+#include <Wire.h>
+
+#define LED_MERAH 8
+#define LED_BIRU 6
+#define BUZZER_PIN 9
+
+struct DataSensor {
+  int suhu;
+  int hum;
+  int gas;
+  int flame;
+};
+
+DataSensor data;
+
+const int gasThreshold = 400;
+const int flameThreshold = 500;
+const int tempThreshold = 35;
+
+void receiveEvent(int howMany) {
+
+  byte* p = (byte*)&data;
+
+  for (int i = 0; i < sizeof(data); i++) {
+    if (Wire.available()) {
+      p[i] = Wire.read();
+    }
+  }
+}
+
+void setup() {
+
+  pinMode(LED_MERAH, OUTPUT);
+  pinMode(LED_BIRU, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  Serial.begin(9600);
+
+  Wire.begin(8);      // alamat slave
+  Wire.onReceive(receiveEvent);
+}
+
+void loop() {
+
+  bool bahaya = false;
+
+  if (data.suhu > tempThreshold)
+    bahaya = true;
+
+  if (data.gas > gasThreshold)
+    bahaya = true;
+
+  if (data.flame < flameThreshold)
+    bahaya = true;
+
+  if (bahaya) {
+
+    digitalWrite(LED_MERAH, HIGH);
+    digitalWrite(LED_BIRU, LOW);
+
+    tone(BUZZER_PIN, 2000);
+  }
+  else {
+
+    digitalWrite(LED_MERAH, LOW);
+    digitalWrite(LED_BIRU, HIGH);
+
+    noTone(BUZZER_PIN);
+  }
+
+  Serial.print("Suhu: ");
+  Serial.print(data.suhu);
+
+  Serial.print(" | Hum: ");
+  Serial.print(data.hum);
+
+  Serial.print(" | Gas: ");
+  Serial.print(data.gas);
+
+  Serial.print(" | Flame: ");
+  Serial.println(data.flame);
+
+  delay(500);
+}
