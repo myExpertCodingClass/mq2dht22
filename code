@@ -1,0 +1,70 @@
+#include <DHT.h>
+
+#define DHTPIN 2
+#define DHTTYPE DHT11
+#define MQ2_PIN A0
+
+#define LED_MERAH 8
+#define LED_BIRU 6
+#define BUZZER_PIN 9
+
+DHT dht(DHTPIN, DHTTYPE);
+
+int gasThreshold = 400;       
+float tempThreshold = 35.0;   
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(LED_MERAH, OUTPUT);
+  pinMode(LED_BIRU, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  dht.begin();
+
+  Serial.println("=== Sistem Monitoring Kualitas Udara ===");
+}
+
+void loop() {
+
+  int gasValue = analogRead(MQ2_PIN);
+
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Gagal membaca sensor DHT11!");
+    delay(1000);
+    return;
+  }
+
+  Serial.print("Gas: ");
+  Serial.print(gasValue);
+
+  Serial.print(" | Suhu: ");
+  Serial.print(temperature);
+  Serial.print(" °C");
+
+  Serial.print(" | Kelembaban: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+
+  if (gasValue > gasThreshold || temperature > tempThreshold) {
+
+    digitalWrite(LED_MERAH, HIGH);
+    digitalWrite(LED_BIRU, LOW);
+    digitalWrite(BUZZER_PIN, HIGH);
+
+    Serial.println("PERINGATAN! Kualitas Udara Tidak Aman");
+  }
+  else {
+
+    digitalWrite(LED_MERAH, LOW);
+    digitalWrite(LED_BIRU, HIGH);
+    digitalWrite(BUZZER_PIN, LOW);
+
+    Serial.println("Kondisi Aman");
+  }
+
+  delay(1000);
+}
